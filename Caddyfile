@@ -1,96 +1,28 @@
-# Global options
-{
-	admin off
-	persist_config off
-	auto_https off
-	
-	# Runtime logs
-	log {
-		format json
-		level INFO  # Change to DEBUG for more details
-		output stdout  # You can redirect this to a file or a logging service
-	}
-
-	# Server options
-	servers {
-		trusted_proxies static private_ranges
-	}
-}
-
-(lb_settings) {
-	lb_policy round_robin
-	lb_retries 100
-	lb_try_duration 10s
-	lb_try_interval 250ms
-}
-
-(passive_health_checks) {
-	fail_duration 60s
-	max_fails 300
-	unhealthy_latency 5s
-	unhealthy_request_count 200
-}
-
-# Site block, listens on the $PORT environment variable, automatically assigned by Railway
 :{$PORT} {
-	# Access logs
-	log {
-		format json
-		level INFO  # Set to DEBUG for verbose logs
-		output stdout
-	}
-
-	# Enable structured tracing for requests
-	@trace {
-		remote_ip private_ranges
-	}
-	handle @trace {
-		log {
-			format json
-			level DEBUG
-			output stdout
+	handle_path /api/* {
+		reverse_proxy {
+		dynamic a {
+			name {$BACKEND_DOMAIN}
+			port {$BACKEND_PORT}
+			refresh 1s
+			dial_timeout 30s
+			versions ipv4 ipv6
 		}
 	}
 
-	# Proxy all requests for /* to the frontend
-	reverse_proxy {
+	handle_path /uploads/* {
+		root * /uploads/
+		file_server
+	}
+
+	handle {
+		reverse_proxy 
 		dynamic a {
 			name {$FRONTEND_DOMAIN}
 			port {$FRONTEND_PORT}
 			refresh 1s
 			dial_timeout 30s
 			versions ipv4 ipv6
-		}
-
-		# Configure load balancing settings
-		import lb_settings
-
-		# Configure passive health checks
-		import passive_health_checks
-
-		# Set the Host header dynamically
-		header_up Host {upstream_hostport}
-	}
-
-	# Handle API requests separately
-	handle_path {$BACKEND_PATH:/api}/* {
-		reverse_proxy {
-			dynamic a {
-				name {$BACKEND_DOMAIN}
-				port {$BACKEND_PORT}
-				refresh 1s
-				dial_timeout 30s
-				versions ipv4 ipv6
-			}
-
-			# Configure load balancing settings
-			import lb_settings
-
-			# Configure passive health checks
-			import passive_health_checks
-
-			# Set the Host header dynamically
-			header_up Host {upstream_hostport}
 		}
 	}
 }
